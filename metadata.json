@@ -1,0 +1,6 @@
+{
+  "name": "متجر حكاية للنايلون",
+  "description": "متجر حكاية للنايلون - تجربة تسوق راقية لأرقى حلول التعبئة والتغليف بأعلى جودة لمختلف الاستخدامات. تواصل مع مساعدنا الذكي واطلب مباشرة عبر الواتساب.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
