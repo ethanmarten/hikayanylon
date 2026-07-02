@@ -23,30 +23,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Find and Execute Gradle Build
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          elif [ -f "./app/gradlew" ]; then
-            cd app
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          else
-            # إذا لم يجد الملف في المجلدين، سيبحث عنه في كامل المشروع ويشغله
-            GRADLEW_PATH=$(find . -name "gradlew" -print -quit)
-            if [ -z "$GRADLEW_PATH" ]; then
-              echo "Error: gradlew not found anywhere in the repository."
-              exit 1
-            fi
-            GRADLEW_DIR=$(dirname "$GRADLEW_PATH")
-            cd "$GRADLEW_DIR"
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          fi
+      - name: Build with Global Gradle
+        run: gradle assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Hikaya-Store-APK
-          path: "**/build/outputs/apk/debug/*.apk" # سيبحث عن ملف الـ APK ويجلبه تلقائياً من أي مسار تم البناء فيه
+          path: "**/build/outputs/apk/debug/*.apk"
