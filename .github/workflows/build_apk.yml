@@ -28,6 +28,18 @@ jobs:
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
           cp .env app/ || true
 
+      - name: Auto Fix Google Services Package Name
+        run: |
+          # هادي الخطوة بتقرأ ملف الـ JSON وتستبدل أي اسم حزمة قديم بالاسم الصحيح للتطبيق
+          JSON_PATH="app/google-services.json"
+          if [ -f "$JSON_PATH" ]; then
+            # استبدال اسم الحزمة بداخل ملف الـ JSON برمجياً
+            sed -i 's/"package_name": "[^"]*"/"package_name": "com.aistudio.hikaya_store.kxslyb"/g' "$JSON_PATH"
+            echo "Package name fixed in google-services.json"
+          else
+            echo "Warning: google-services.json not found in app/ directory!"
+          fi
+
       - name: Fix Android Internet Permission
         run: |
           MANIFEST_PATH=$(find . -name "AndroidManifest.xml" -print -quit)
