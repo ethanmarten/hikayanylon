@@ -62,6 +62,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.firebase.FirebaseService.initialize(applicationContext)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -123,89 +124,107 @@ fun sendWhatsAppMessage(context: Context, userName: String, cart: List<CartItem>
 @Composable
 fun MainAppScreen() {
     val viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val currentUser by viewModel.currentUser.collectAsState()
     val selectedTab by viewModel.selectedTab.collectAsState()
     val cart by viewModel.cart.collectAsState()
     val activePopup by viewModel.activeProductPopup.collectAsState()
+    val livePrices by viewModel.livePrices.collectAsState()
     val context = LocalContext.current
 
-    val productsList = remember {
-        listOf(
-            Product("black_nylon", "أكياس النايلون الأسود", "أكياس متينة وفاخرة مخصصة للاستخدامات التجارية والصناعية الشاقة.", "inventory", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
-            Product("colored_nylon", "الوسط الملون", "نايلون ملون وسط بمواصفات ممتازة ومقاومة فائقة وعزل ممتاز.", "shopping_bag", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
-            Product("large_box_nylon", "نايلون البكسة الكبير الأزرق والأسود", "أغطية نايلون البكسة الكبير، حماية ممتازة ومقاومة عالية للتمزق والظروف الجوية.", "layers", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
-            Product("plastic_cups", "كاسات بلاستيك وسط", "أكواب بلاستيكية متوسطة فاخرة، مثالية للمشروبات الباردة والساخنة.", "local_cafe", "ربطة", "7 شيكل/ربطة"),
-            Product("paper_cups", "كاسات كرتون", "أكواب كرتونية فاخرة بتصاميم عصرية وعزل حراري ممتاز للمشروبات.", "coffee", "ربطة", "تواصل معنا لمعرفة السعر الحالي", isContactOnly = true)
-        )
-    }
-
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NavyDeep),
-        topBar = { TopBrandingBar() },
-        bottomBar = {
-            LuxuryBottomNavigation(
-                selectedTab = selectedTab,
-                onTabSelected = { viewModel.selectTab(it) }
+    if (currentUser == null) {
+        AuthScreen(viewModel = viewModel)
+    } else {
+        val productsList = remember(livePrices) {
+            listOf(
+                Product("black_nylon", "أكياس النايلون الأسود", "أكياس متينة وفاخرة مخصصة للاستخدامات التجارية والصناعية الشاقة.", "inventory", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
+                Product("colored_nylon", "الوسط الملون", "نايلون ملون وسط بمواصفات ممتازة ومقاومة فائقة وعزل ممتاز.", "shopping_bag", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
+                Product("large_box_nylon", "نايلون البكسة الكبير الأزرق والأسود", "أغطية نايلون البكسة الكبير، حماية ممتازة ومقاومة عالية للتمزق والظروف الجوية.", "layers", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
+                Product("plastic_cups", "كاسات بلاستيك وسط", "أكواب بلاستيكية متوسطة فاخرة، مثالية للمشروبات الباردة والساخنة.", "local_cafe", "ربطة", "${livePrices.plasticCups} شيكل/ربطة"),
+                Product("paper_cups", "كاسات كرتون", "أكواب كرتونية فاخرة بتصاميم عصرية وعزل حراري ممتاز للمشروبات.", "coffee", "ربطة", "تواصل معنا لمعرفة السعر الحالي", isContactOnly = true)
             )
         }
-    ) { innerPadding ->
-        Box(
+
+        Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .background(Brush.verticalGradient(listOf(NavyDeep, NavySurface)))
-        ) {
-            // Main views with simple tab navigation
-            when (selectedTab) {
-                0 -> CatalogScreen(
-                    productsList = productsList,
-                    onProductClick = { viewModel.openProductPopup(it) }
+                .background(NavyDeep),
+            topBar = { TopBrandingBar(viewModel = viewModel) },
+            bottomBar = {
+                LuxuryBottomNavigation(
+                    selectedTab = selectedTab,
+                    isAdmin = currentUser?.role == "Admin",
+                    onTabSelected = { viewModel.selectTab(it) }
                 )
-                1 -> ChatScreen(viewModel = viewModel)
             }
-
-            // Floating Cart Indicator & Drawer
-            CartDrawer(viewModel = viewModel)
-
-            // Dynamic Popup for Configurable Products
-            activePopup?.let { product ->
-                ProductConfigPopup(
-                    product = product,
-                    onDismiss = { viewModel.closeProductPopup() },
-                    onConfirm = { subtype, qty, unitPrice, totalPrice ->
-                        viewModel.addToCart(
-                            productName = product.title,
-                            subtype = subtype,
-                            quantity = qty,
-                            unit = product.unit,
-                            unitPrice = unitPrice,
-                            totalPrice = totalPrice
-                        )
-                        viewModel.closeProductPopup()
-                        Toast.makeText(context, "تمت إضافة المنتج إلى السلة ✨", Toast.LENGTH_SHORT).show()
-                    },
-                    onQuickWhatsApp = { subtype, qty, unitPrice, totalPrice ->
-                        val singleItem = CartItem(
-                            id = "temp",
-                            productName = product.title,
-                            subtype = subtype,
-                            quantity = qty,
-                            unit = product.unit,
-                            unitPrice = unitPrice,
-                            totalPrice = totalPrice
-                        )
-                        viewModel.closeProductPopup()
-                        sendWhatsAppMessage(context, viewModel.customerName.value, emptyList(), singleItem)
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(Brush.verticalGradient(listOf(NavyDeep, NavySurface)))
+            ) {
+                // Main views with tab navigation
+                when (selectedTab) {
+                    0 -> CatalogScreen(
+                        productsList = productsList,
+                        onProductClick = { viewModel.openProductPopup(it) }
+                    )
+                    1 -> ChatScreen(viewModel = viewModel)
+                    2 -> {
+                        if (currentUser?.role == "Admin") {
+                            AdminDashboard(viewModel = viewModel)
+                        } else {
+                            viewModel.selectTab(0)
+                        }
                     }
-                )
+                }
+
+                // Floating Cart Indicator & Drawer
+                if (selectedTab != 2) {
+                    CartDrawer(viewModel = viewModel)
+                }
+
+                // Dynamic Popup for Configurable Products
+                activePopup?.let { product ->
+                    ProductConfigPopup(
+                        product = product,
+                        onDismiss = { viewModel.closeProductPopup() },
+                        onConfirm = { subtype, qty, unitPrice, totalPrice ->
+                            viewModel.addToCart(
+                                productName = product.title,
+                                subtype = subtype,
+                                quantity = qty,
+                                unit = product.unit,
+                                unitPrice = unitPrice,
+                                totalPrice = totalPrice
+                            )
+                            viewModel.closeProductPopup()
+                            Toast.makeText(context, "تمت إضافة المنتج إلى السلة ✨", Toast.LENGTH_SHORT).show()
+                        },
+                        onQuickWhatsApp = { subtype, qty, unitPrice, totalPrice ->
+                            val singleItem = CartItem(
+                                id = "temp",
+                                productName = product.title,
+                                subtype = subtype,
+                                quantity = qty,
+                                unit = product.unit,
+                                unitPrice = unitPrice,
+                                totalPrice = totalPrice
+                            )
+                            viewModel.closeProductPopup()
+                            sendWhatsAppMessage(context, viewModel.customerName.value, emptyList(), singleItem)
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun TopBrandingBar() {
+fun TopBrandingBar(viewModel: MainViewModel) {
+    val currentUser by viewModel.currentUser.collectAsState()
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -216,30 +235,72 @@ fun TopBrandingBar() {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.WorkspacePremium,
-                    contentDescription = "Premium Brand Logo",
-                    tint = GoldPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "متجر حكاية للنايلون",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = GoldPrimary,
-                    textAlign = TextAlign.Center,
-                    letterSpacing = 0.5.sp
-                )
+                // Logout Button
+                IconButton(
+                    onClick = { viewModel.logout() },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(NavyLight)
+                        .border(BorderStroke(1.dp, BorderGold), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Logout,
+                        contentDescription = "تسجيل الخروج",
+                        tint = Color(0xFFEF9A9A),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Middle Brand Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = "Premium Brand Logo",
+                        tint = GoldPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "متجر حكاية للنايلون",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // User Role Badge
+                currentUser?.let { user ->
+                    val isAdm = user.role == "Admin"
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isAdm) Color(0xFF2C2515) else NavyLight)
+                            .border(BorderStroke(1.dp, if (isAdm) GoldPrimary else BorderGold), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (isAdm) "مدير 👑" else "زبون 👤",
+                            color = if (isAdm) GoldAccent else TextOnNavy,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
+            
             Text(
                 text = "العلامة الفاخرة للتعبئة والتغليف والتسوق الراقي",
                 fontSize = 11.sp,
@@ -248,7 +309,7 @@ fun TopBrandingBar() {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 2.dp)
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.3f)
@@ -260,7 +321,7 @@ fun TopBrandingBar() {
 }
 
 @Composable
-fun LuxuryBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+fun LuxuryBottomNavigation(selectedTab: Int, isAdmin: Boolean, onTabSelected: (Int) -> Unit) {
     NavigationBar(
         modifier = Modifier
             .fillMaxWidth()
@@ -276,7 +337,7 @@ fun LuxuryBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 Text(
                     text = "المنتجات والطلب",
                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = if (selectedTab == 0) GoldPrimary else TextMuted
                 )
             },
@@ -299,16 +360,16 @@ fun LuxuryBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
             onClick = { onTabSelected(1) },
             label = {
                 Text(
-                    text = "مساعد حكاية الذكي",
+                    text = "المساعد الذكي",
                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = if (selectedTab == 1) GoldPrimary else TextMuted
                 )
             },
             icon = {
                 Icon(
                     imageVector = Icons.Outlined.Chat,
-                    contentDescription = "مساعد حكاية الذكي",
+                    contentDescription = "المساعد الذكي",
                     tint = if (selectedTab == 1) GoldPrimary else TextMuted,
                     modifier = Modifier.size(24.dp)
                 )
@@ -318,6 +379,33 @@ fun LuxuryBottomNavigation(selectedTab: Int, onTabSelected: (Int) -> Unit) {
             ),
             modifier = Modifier.testTag("tab_chat")
         )
+
+        if (isAdmin) {
+            NavigationBarItem(
+                selected = selectedTab == 2,
+                onClick = { onTabSelected(2) },
+                label = {
+                    Text(
+                        text = "إعدادات المدير",
+                        fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 11.sp,
+                        color = if (selectedTab == 2) GoldPrimary else TextMuted
+                    )
+                },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.AdminPanelSettings,
+                        contentDescription = "إعدادات المدير",
+                        tint = if (selectedTab == 2) GoldPrimary else TextMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = NavyLight
+                ),
+                modifier = Modifier.testTag("tab_admin")
+            )
+        }
     }
 }
 
@@ -539,6 +627,7 @@ fun ProductConfigPopup(
 
     // Pricing calculation helper
     val viewModel: MainViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val livePrices by viewModel.livePrices.collectAsState()
     val (unitPrice, totalPrice) = viewModel.calculatePrice(product.id, selectedSubtype, quantity)
 
     Dialog(onDismissRequest = { onDismiss() }) {
@@ -701,7 +790,7 @@ fun ProductConfigPopup(
                                             fontSize = 15.sp
                                         )
                                         Text(
-                                            text = if (source == "مصري") "17 شيكل/كيلو" else "15 شيكل/كيلو",
+                                            text = if (source == "مصري") "${livePrices.egyptianNylon} شيكل/كيلو" else "${livePrices.westBankNylon} شيكل/كيلو",
                                             fontSize = 11.sp,
                                             color = if (isSelected) GoldAccent else TextMuted
                                         )
