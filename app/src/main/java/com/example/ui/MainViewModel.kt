@@ -13,12 +13,12 @@ import kotlinx.coroutines.launch
 
 // Data model for products in catalog
 data class Product(
-    val id: String,
-    val title: String,
-    val description: String,
-    val iconName: String,
-    val unit: String,
-    val priceInfo: String,
+    val id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val iconName: String = "",
+    val unit: String = "",
+    val priceInfo: String = "",
     val hasSubtypes: Boolean = false,
     val isContactOnly: Boolean = false
 )
@@ -53,6 +53,17 @@ class MainViewModel : ViewModel() {
 
     private val _authError = MutableStateFlow<String?>(null)
     val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    private val _showAuthModal = MutableStateFlow(false)
+    val showAuthModal: StateFlow<Boolean> = _showAuthModal.asStateFlow()
+
+    fun showAuth() {
+        _showAuthModal.value = true
+    }
+
+    fun hideAuth() {
+        _showAuthModal.value = false
+    }
 
     // Live Prices synced with Firestore
     private val _livePrices = MutableStateFlow(LivePrices())
@@ -90,6 +101,10 @@ class MainViewModel : ViewModel() {
     private val _activeProductPopup = MutableStateFlow<Product?>(null)
     val activeProductPopup: StateFlow<Product?> = _activeProductPopup.asStateFlow()
 
+    // Dynamic Products list synced with Firestore
+    private val _productsList = MutableStateFlow<List<Product>>(emptyList())
+    val productsList: StateFlow<List<Product>> = _productsList.asStateFlow()
+
     init {
         // Fetch current active user on load
         checkActiveUser()
@@ -97,6 +112,23 @@ class MainViewModel : ViewModel() {
         // Sync and listen to dynamic Firestore prices
         FirebaseService.observePrices { updatedPrices ->
             _livePrices.value = updatedPrices
+        }
+
+        // Sync and listen to dynamic Firestore products
+        FirebaseService.observeProducts { updatedProducts ->
+            _productsList.value = updatedProducts
+        }
+    }
+
+    fun saveProduct(product: Product, onComplete: (Result<Unit>) -> Unit) {
+        FirebaseService.saveProduct(product) { result ->
+            onComplete(result)
+        }
+    }
+
+    fun deleteProduct(productId: String, onComplete: (Result<Unit>) -> Unit) {
+        FirebaseService.deleteProduct(productId) { result ->
+            onComplete(result)
         }
     }
 
@@ -118,6 +150,7 @@ class MainViewModel : ViewModel() {
                 onSuccess = { profile ->
                     _currentUser.value = profile
                     _customerName.value = profile.name
+                    _showAuthModal.value = false
                 },
                 onFailure = { error ->
                     _authError.value = error.message
@@ -135,6 +168,7 @@ class MainViewModel : ViewModel() {
                 onSuccess = { profile ->
                     _currentUser.value = profile
                     _customerName.value = profile.name
+                    _showAuthModal.value = false
                 },
                 onFailure = { error ->
                     _authError.value = error.message
@@ -182,12 +216,13 @@ class MainViewModel : ViewModel() {
 
     // Dynamic Pricing Calculation Rules using Live Firestore Prices
     fun calculatePrice(productId: String, subtype: String?, quantity: Double): Pair<Double, Double> {
-        if (productId == "paper_cups") {
+        val targetProduct = _productsList.value.find { it.id == productId }
+        if (targetProduct?.isContactOnly == true || productId == "paper_cups") {
             return Pair(0.0, 0.0) // Contact only
         }
         
         val prices = _livePrices.value
-        if (productId == "plastic_cups") {
+        if (productId == "plastic_cups" || targetProduct?.unit == "ربطة") {
             val cupPrice = prices.plasticCups
             return Pair(cupPrice, cupPrice * quantity)
         }

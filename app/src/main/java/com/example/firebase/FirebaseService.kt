@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.ui.Product
 
 enum class FirebaseMode {
     REAL,
@@ -261,6 +262,78 @@ object FirebaseService {
             // Sandbox mode
             sandboxPrices = prices
             sandboxPricesListener?.invoke(prices)
+            onComplete(Result.success(Unit))
+        }
+    }
+
+    private var sandboxProductsListener: ((List<Product>) -> Unit)? = null
+    private val defaultProducts = listOf(
+        Product("black_nylon", "أكياس النايلون الأسود", "أكياس متينة وفاخرة مخصصة للاستخدامات التجارية والصناعية الشاقة.", "inventory", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
+        Product("colored_nylon", "الوسط الملون", "نايلون ملون وسط بمواصفات ممتازة ومقاومة فائقة وعزل ممتاز.", "shopping_bag", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
+        Product("large_box_nylon", "نايلون البكسة الكبير الأزرق والأسود", "أغطية نايلون البكسة الكبير، حماية ممتازة ومقاومة عالية للتمزق والظروف الجوية.", "layers", "كيلو", "ابتداءً من 15 شيكل/كيلو", hasSubtypes = true),
+        Product("plastic_cups", "كاسات بلاستيك وسط", "أكواب بلاستيكية متوسطة فاخرة، مثالية للمشروبات الباردة والساخنة.", "local_cafe", "ربطة", "7 شيكل/ربطة"),
+        Product("paper_cups", "كاسات كرتون", "أكواب كرتونية فاخرة بتصاميم عصرية وعزل حراري ممتاز للمشروبات.", "coffee", "ربطة", "تواصل معنا لمعرفة السعر الحالي", isContactOnly = true)
+    )
+    private var sandboxProducts = defaultProducts.toMutableList()
+
+    fun observeProducts(onProductsChanged: (List<Product>) -> Unit) {
+        if (_mode == FirebaseMode.REAL && firestore != null) {
+            firestore!!.collection("products")
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.w(TAG, "Listen failed for products", e)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && !snapshot.isEmpty) {
+                        val list = snapshot.documents.mapNotNull { it.toObject(Product::class.java) }
+                        onProductsChanged(list)
+                    } else {
+                        // Pre-populate with default products if empty
+                        defaultProducts.forEach { product ->
+                            firestore!!.collection("products").document(product.id).set(product)
+                        }
+                        onProductsChanged(defaultProducts)
+                    }
+                }
+        } else {
+            sandboxProductsListener = onProductsChanged
+            onProductsChanged(sandboxProducts)
+        }
+    }
+
+    fun saveProduct(product: Product, onComplete: (Result<Unit>) -> Unit) {
+        if (_mode == FirebaseMode.REAL && firestore != null) {
+            firestore!!.collection("products").document(product.id).set(product)
+                .addOnSuccessListener {
+                    onComplete(Result.success(Unit))
+                }
+                .addOnFailureListener { e ->
+                    onComplete(Result.failure(e))
+                }
+        } else {
+            val idx = sandboxProducts.indexOfFirst { it.id == product.id }
+            if (idx >= 0) {
+                sandboxProducts[idx] = product
+            } else {
+                sandboxProducts.add(product)
+            }
+            sandboxProductsListener?.invoke(sandboxProducts)
+            onComplete(Result.success(Unit))
+        }
+    }
+
+    fun deleteProduct(productId: String, onComplete: (Result<Unit>) -> Unit) {
+        if (_mode == FirebaseMode.REAL && firestore != null) {
+            firestore!!.collection("products").document(productId).delete()
+                .addOnSuccessListener {
+                    onComplete(Result.success(Unit))
+                }
+                .addOnFailureListener { e ->
+                    onComplete(Result.failure(e))
+                }
+        } else {
+            sandboxProducts.removeAll { it.id == productId }
+            sandboxProductsListener?.invoke(sandboxProducts)
             onComplete(Result.success(Unit))
         }
     }

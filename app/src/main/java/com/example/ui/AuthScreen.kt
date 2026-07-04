@@ -35,7 +35,7 @@ import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AuthScreen(viewModel: MainViewModel) {
+fun AuthScreen(viewModel: MainViewModel, onDismiss: (() -> Unit)? = null) {
     var isLogin by remember { mutableStateOf(true) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -306,6 +306,21 @@ fun AuthScreen(viewModel: MainViewModel) {
                                 color = NavyDeep,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
+                            )
+                        }
+                    }
+
+                    if (onDismiss != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "الولوج كضيف (تصفح فقط) 👤",
+                                color = GoldAccent,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
                             )
                         }
                     }

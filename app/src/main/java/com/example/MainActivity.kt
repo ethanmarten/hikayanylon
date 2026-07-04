@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
@@ -129,67 +130,60 @@ fun MainAppScreen() {
     val cart by viewModel.cart.collectAsState()
     val activePopup by viewModel.activeProductPopup.collectAsState()
     val livePrices by viewModel.livePrices.collectAsState()
+    val productsList by viewModel.productsList.collectAsState()
+    val showAuthModal by viewModel.showAuthModal.collectAsState()
     val context = LocalContext.current
 
-    if (currentUser == null) {
-        AuthScreen(viewModel = viewModel)
-    } else {
-        val productsList = remember(livePrices) {
-            listOf(
-                Product("black_nylon", "أكياس النايلون الأسود", "أكياس متينة وفاخرة مخصصة للاستخدامات التجارية والصناعية الشاقة.", "inventory", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
-                Product("colored_nylon", "الوسط الملون", "نايلون ملون وسط بمواصفات ممتازة ومقاومة فائقة وعزل ممتاز.", "shopping_bag", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
-                Product("large_box_nylon", "نايلون البكسة الكبير الأزرق والأسود", "أغطية نايلون البكسة الكبير، حماية ممتازة ومقاومة عالية للتمزق والظروف الجوية.", "layers", "كيلو", "ابتداءً من ${livePrices.westBankNylon} شيكل/كيلو", hasSubtypes = true),
-                Product("plastic_cups", "كاسات بلاستيك وسط", "أكواب بلاستيكية متوسطة فاخرة، مثالية للمشروبات الباردة والساخنة.", "local_cafe", "ربطة", "${livePrices.plasticCups} شيكل/ربطة"),
-                Product("paper_cups", "كاسات كرتون", "أكواب كرتونية فاخرة بتصاميم عصرية وعزل حراري ممتاز للمشروبات.", "coffee", "ربطة", "تواصل معنا لمعرفة السعر الحالي", isContactOnly = true)
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NavyDeep),
+        topBar = { TopBrandingBar(viewModel = viewModel) },
+        bottomBar = {
+            LuxuryBottomNavigation(
+                selectedTab = selectedTab,
+                isAdmin = currentUser?.role == "Admin",
+                onTabSelected = { viewModel.selectTab(it) }
             )
         }
-
-        Scaffold(
+    ) { innerPadding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(NavyDeep),
-            topBar = { TopBrandingBar(viewModel = viewModel) },
-            bottomBar = {
-                LuxuryBottomNavigation(
-                    selectedTab = selectedTab,
-                    isAdmin = currentUser?.role == "Admin",
-                    onTabSelected = { viewModel.selectTab(it) }
+                .padding(innerPadding)
+                .background(Brush.verticalGradient(listOf(NavyDeep, NavySurface)))
+        ) {
+            // Main views with tab navigation
+            when (selectedTab) {
+                0 -> CatalogScreen(
+                    productsList = productsList,
+                    onProductClick = { viewModel.openProductPopup(it) }
                 )
-            }
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(Brush.verticalGradient(listOf(NavyDeep, NavySurface)))
-            ) {
-                // Main views with tab navigation
-                when (selectedTab) {
-                    0 -> CatalogScreen(
-                        productsList = productsList,
-                        onProductClick = { viewModel.openProductPopup(it) }
-                    )
-                    1 -> ChatScreen(viewModel = viewModel)
-                    2 -> {
-                        if (currentUser?.role == "Admin") {
-                            AdminDashboard(viewModel = viewModel)
-                        } else {
-                            viewModel.selectTab(0)
-                        }
+                1 -> ChatScreen(viewModel = viewModel)
+                2 -> {
+                    if (currentUser?.role == "Admin") {
+                        AdminDashboard(viewModel = viewModel)
+                    } else {
+                        viewModel.selectTab(0)
                     }
                 }
+            }
 
-                // Floating Cart Indicator & Drawer
-                if (selectedTab != 2) {
-                    CartDrawer(viewModel = viewModel)
-                }
+            // Floating Cart Indicator & Drawer
+            if (selectedTab != 2) {
+                CartDrawer(viewModel = viewModel)
+            }
 
-                // Dynamic Popup for Configurable Products
-                activePopup?.let { product ->
-                    ProductConfigPopup(
-                        product = product,
-                        onDismiss = { viewModel.closeProductPopup() },
-                        onConfirm = { subtype, qty, unitPrice, totalPrice ->
+            // Dynamic Popup for Configurable Products
+            activePopup?.let { product ->
+                ProductConfigPopup(
+                    product = product,
+                    onDismiss = { viewModel.closeProductPopup() },
+                    onConfirm = { subtype, qty, unitPrice, totalPrice ->
+                        if (currentUser == null) {
+                            viewModel.showAuth()
+                            Toast.makeText(context, "الرجاء تسجيل الدخول أو إنشاء حساب لإتمام عملية الشراء 👤", Toast.LENGTH_LONG).show()
+                        } else {
                             viewModel.addToCart(
                                 productName = product.title,
                                 subtype = subtype,
@@ -200,8 +194,13 @@ fun MainAppScreen() {
                             )
                             viewModel.closeProductPopup()
                             Toast.makeText(context, "تمت إضافة المنتج إلى السلة ✨", Toast.LENGTH_SHORT).show()
-                        },
-                        onQuickWhatsApp = { subtype, qty, unitPrice, totalPrice ->
+                        }
+                    },
+                    onQuickWhatsApp = { subtype, qty, unitPrice, totalPrice ->
+                        if (currentUser == null) {
+                            viewModel.showAuth()
+                            Toast.makeText(context, "الرجاء تسجيل الدخول أو إنشاء حساب لإجراء طلب سريع 👤", Toast.LENGTH_LONG).show()
+                        } else {
                             val singleItem = CartItem(
                                 id = "temp",
                                 productName = product.title,
@@ -214,9 +213,21 @@ fun MainAppScreen() {
                             viewModel.closeProductPopup()
                             sendWhatsAppMessage(context, viewModel.customerName.value, emptyList(), singleItem)
                         }
-                    )
-                }
+                    }
+                )
             }
+        }
+    }
+
+    if (showAuthModal) {
+        Dialog(
+            onDismissRequest = { viewModel.hideAuth() },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            AuthScreen(
+                viewModel = viewModel,
+                onDismiss = { viewModel.hideAuth() }
+            )
         }
     }
 }
@@ -243,21 +254,39 @@ fun TopBrandingBar(viewModel: MainViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Logout Button
-                IconButton(
-                    onClick = { viewModel.logout() },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(NavyLight)
-                        .border(BorderStroke(1.dp, BorderGold), CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Logout,
-                        contentDescription = "تسجيل الخروج",
-                        tint = Color(0xFFEF9A9A),
-                        modifier = Modifier.size(18.dp)
-                    )
+                // Logout / Login Button
+                if (currentUser != null) {
+                    IconButton(
+                        onClick = { viewModel.logout() },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(NavyLight)
+                            .border(BorderStroke(1.dp, BorderGold), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "تسجيل الخروج",
+                            tint = Color(0xFFEF9A9A),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = { viewModel.showAuth() },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(NavyLight)
+                            .border(BorderStroke(1.dp, GoldPrimary), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Login,
+                            contentDescription = "تسجيل الدخول",
+                            tint = GoldPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 // Middle Brand Header
@@ -282,8 +311,8 @@ fun TopBrandingBar(viewModel: MainViewModel) {
                 }
 
                 // User Role Badge
-                currentUser?.let { user ->
-                    val isAdm = user.role == "Admin"
+                if (currentUser != null) {
+                    val isAdm = currentUser?.role == "Admin"
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
@@ -294,6 +323,22 @@ fun TopBrandingBar(viewModel: MainViewModel) {
                         Text(
                             text = if (isAdm) "مدير 👑" else "زبون 👤",
                             color = if (isAdm) GoldAccent else TextOnNavy,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(NavyLight)
+                            .border(BorderStroke(1.dp, BorderGold), RoundedCornerShape(12.dp))
+                            .clickable { viewModel.showAuth() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "تسجيل دخول 👤",
+                            color = GoldPrimary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
